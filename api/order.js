@@ -318,7 +318,7 @@ module.exports = async function handler(req, res) {
         customer_name: (req.query.name || 'Customer').trim(),
         customer_email: (req.query.to || req.query.email || '').trim(),
         customer_phone: '',
-        product_id: 'dm-sieeuvg3m1',
+        product_id: 'dm-6wnvpjo219',
         product_name: '15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11',
         product_price: 999,
         currency: 'ZAR',
