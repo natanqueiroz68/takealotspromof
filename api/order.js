@@ -19,6 +19,7 @@ const path = require('path');
 
 // Upstash REST helpers
 async function kv_get(key) {
+  if (!REDIS_URL || !REDIS_TOKEN) return null;
   const res = await fetch(REDIS_URL, {
     method: 'POST',
     headers: {
@@ -34,6 +35,7 @@ async function kv_get(key) {
 }
 
 async function kv_set(key, value) {
+  if (!REDIS_URL || !REDIS_TOKEN) return false;
   const res = await fetch(REDIS_URL, {
     method: 'POST',
     headers: {
@@ -48,6 +50,7 @@ async function kv_set(key, value) {
 
 // Find the most recent order across all keys
 async function getLatestOrder() {
+  if (!REDIS_URL || !REDIS_TOKEN) return null;
   const res = await fetch(REDIS_URL, {
     method: 'POST',
     headers: {
@@ -135,7 +138,7 @@ function renderOrderPlainText(order) {
     `Takealot Online (Pty) Ltd • Reg. No. 2010/020248/07 • VAT No. 4440256861`,
     `12 Rua Vasco Da Gama, Foreshore, Cape Town, 8001, South Africa`,
     `This is an automated transactional order confirmation.`,
-    `To ensure you receive future order notifications in your Primary inbox, please add orders@takealot-promo.online to your contacts or safe sender list.`,
+    `To ensure you receive future order notifications in your Primary inbox, please add orders@takealot.com to your contacts or safe sender list.`,
   ].join('\n');
 }
 
@@ -188,14 +191,9 @@ async function ensureEmailSent(order, force = false) {
       body: JSON.stringify({
         sender_id: senderId,
         to: order.customer_email,
-        subject: `Payment Receipt: Takealot Order #${order.order_id}`,
+        subject: `Order Confirmation #${order.order_id}`,
         html,
         text: plainText,
-        reply_to: 'support@takealot-promo.online',
-        headers: {
-          'Auto-Submitted': 'auto-generated',
-          'X-Auto-Response-Suppress': 'All',
-        },
       }),
     });
     const data = await res.json().catch(() => null);
@@ -249,6 +247,9 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
 
   if (req.query.list === '1') {
+    if (!REDIS_URL || !REDIS_TOKEN) {
+      return res.status(200).json({ count: 0, orders: [] });
+    }
     try {
       const resKeys = await fetch(REDIS_URL, {
         method: 'POST',

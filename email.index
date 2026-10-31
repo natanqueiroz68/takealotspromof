@@ -8,43 +8,7 @@
   <meta name="x-apple-disable-message-reformatting" />
   <meta name="color-scheme" content="light dark" />
   <meta name="supported-color-schemes" content="light dark" />
-  <title>Payment Receipt: Order #{{order_number}} | Takealot</title>
-
-  <!-- GOOGLE TRANSACTIONAL ORDER SCHEMA (PRIMARY INBOX ROUTING) -->
-  <script type="application/ld+json">
-  {
-    "@context": "http://schema.org",
-    "@type": "Order",
-    "merchant": {
-      "@type": "Organization",
-      "name": "takealot.com"
-    },
-    "orderNumber": "{{order_number}}",
-    "priceCurrency": "ZAR",
-    "price": "999.00",
-    "orderDate": "{{delivery_date}}",
-    "orderStatus": "http://schema.org/OrderProcessing",
-    "acceptedOffer": {
-      "@type": "Offer",
-      "itemOffered": {
-        "@type": "Product",
-        "name": "15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11"
-      },
-      "price": "999.00",
-      "priceCurrency": "ZAR",
-      "eligibleQuantity": {
-        "@type": "QuantitativeValue",
-        "value": "1"
-      }
-    },
-    "url": "https://takelaotpromosi.vercel.app/track.html?order={{order_number}}",
-    "potentialAction": {
-      "@type": "ViewAction",
-      "name": "View Order",
-      "url": "https://takelaotpromosi.vercel.app/track.html?order={{order_number}}"
-    }
-  }
-  </script>
+  <title>Order Confirmation #{{order_number}} | Takealot</title>
 
   <style type="text/css">
     /* ── BASE RESETS ── */
@@ -522,7 +486,7 @@
                   <td align="center">
                     <p class="email-footer-copy" style="margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 1.5; color: #9ca3af;">
                       You received this email because an order was placed on Takealot. This is an automated transactional order confirmation.<br />
-                      To ensure you receive future order notifications in your Primary inbox, please add <strong style="color: #4b5563;">orders@takealot-promo.online</strong> to your contacts or safe sender list.
+                      To ensure you receive future order notifications in your Primary inbox, please add <strong style="color: #4b5563;">orders@takealot.com</strong> to your contacts or safe sender list.
                     </p>
                   </td>
                 </tr>
