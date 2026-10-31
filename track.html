@@ -970,6 +970,13 @@
             if (order.product_image) {
               if (imgEl) { imgEl.src = order.product_image; imgEl.onerror = null; }
             }
+            if (order.product_name && titleEl) {
+              titleEl.textContent = order.product_name;
+            }
+            var priceEl = document.getElementById('trackProductPrice');
+            if (order.product_price && priceEl) {
+              priceEl.textContent = 'R ' + order.product_price;
+            }
             if (order.received_date) {
               var sRec = new Date(order.received_date);
               if (!isNaN(sRec.getTime())) {
