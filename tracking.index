@@ -706,7 +706,7 @@
     <!-- SHOWCASE AZUL CLARO COM O PRODUTO -->
     <div class="product-showcase-banner">
       <div class="product-thumb-card">
-        <img id="trackingProductImg" class="product-thumb-img" src="images/jbl-partybox-520-main.png" alt="JBL PartyBox 520 Portable Battery-Powered Party Speaker - Black With 2 JBL Wireless Microphones" onerror="this.src='images/jbl-partybox-520-main.png'" />
+        <img id="trackingProductImg" class="product-thumb-img" src="images/laptop-main.jpg" alt="15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11" onerror="this.src='images/laptop-main.jpg'" />
       </div>
     </div>
 
@@ -1063,7 +1063,7 @@
         preserveOrderInLinks(oid);
 
         var imgEl = document.getElementById('trackingProductImg');
-        if (imgEl) imgEl.src = 'images/jbl-partybox-520-main.png';
+        if (imgEl) imgEl.src = 'images/laptop-main.jpg';
 
         var purchaseKey = 'takealot_purchase_date_' + oid;
         var deliveryKey = 'takealot_delivery_date_' + oid;

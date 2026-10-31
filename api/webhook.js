@@ -6,8 +6,7 @@
 //   UPSTASH_REDIS_REST_URL    e.g. https://xxxx.upstash.io
 //   UPSTASH_REDIS_REST_TOKEN  Upstash REST token
 //   WEBHOOK_SECRET            signing secret from paw-house.shop webhook settings
-//   PRODUCT_IMAGE_DEFAULT     fallback product image URL
-//   PRODUCT_IMAGE_DM_FWYYAOOHEE   image URL for the JBL PartyBox 520 product
+//   PRODUCT_IMAGE_DEFAULT         image URL for the 15.6-inch Laptop N5095 product
 //
 // Paw House sends:  X-Paw-House-Signature: <hmac-sha256-hex>
 // Signature is computed by Paw House as:  HMAC-SHA256(rawBody, signingSecret)
@@ -181,12 +180,12 @@ function renderOrderPlainText(order) {
     `- Delivery Method: Courier`,
     ``,
     `ITEMS IN THIS ORDER:`,
-    `- 1x JBL PartyBox 520 Portable Battery-Powered Party Speaker - Black With 2 JBL Wireless Microphones - R 799.00`,
+    `- 1x 15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11 - R 999.00`,
     ``,
     `PAYMENT SUMMARY:`,
-    `- Subtotal: R 799.00`,
+    `- Subtotal: R 999.00`,
     `- Shipping: Free`,
-    `- Total Paid: R 799.00`,
+    `- Total Paid: R 999.00`,
     ``,
     `TRACK YOUR ORDER:`,
     `${trackUrl}`,
@@ -500,10 +499,10 @@ async function handler(req, res) {
   const productName  = item.title || item.name || item.productName || item.product_title
                     || (payload.product && payload.product.name)
                     || payload.productTitle || payload.product_title
-                    || 'JBL PartyBox 520 Portable Battery-Powered Party Speaker - Black With 2 JBL Wireless Microphones';
+                    || '15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11';
   const productPrice = item.totalPrice != null
                     ? item.totalPrice
-                    : (item.price != null ? item.price : (payload.amount != null ? payload.amount : 799));
+                    : (item.price != null ? item.price : (payload.amount != null ? payload.amount : 999));
   const currency     = item.currency || payload.currency || 'ZAR';
 
   // Product image: per-product env var or default

@@ -695,7 +695,7 @@
     <!-- ORDER & ESTIMATED DELIVERY CARD -->
     <section class="order-info-card" aria-label="Order summary status">
       <div class="order-sub-number">Order <span id="trackingOrderId"></span></div>
-      <h2 class="collection-date-title">Estimated Delivery from Tue, 6 Oct 2026</h2>
+      <h2 class="collection-date-title" id="trackingDeliveryTitle">Estimated Delivery from <span id="trackingDeliveryDate">–</span></h2>
 
       <!-- NOTA PONTILHADA -->
       <div class="note-box">
@@ -706,7 +706,7 @@
     <!-- SHOWCASE AZUL CLARO COM O PRODUTO -->
     <div class="product-showcase-banner">
       <div class="product-thumb-card">
-        <img id="trackingProductImg" class="product-thumb-img" src="images/jbl-partybox-520-main.png" alt="JBL PartyBox 520 Portable Battery-Powered Party Speaker - Black With 2 JBL Wireless Microphones" onerror="this.src='images/jbl-partybox-520-main.png'" />
+        <img id="trackingProductImg" class="product-thumb-img" src="images/laptop-main.jpg" alt="15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11" onerror="this.src='images/laptop-main.jpg'" />
       </div>
     </div>
 
@@ -717,9 +717,9 @@
         <!-- Trilha contínua de fundo cinza claro -->
         <div class="stepper-continuous-track"></div>
 
-        <!-- ETAPA 1: 2 OCT 2026 - ORDER PAID (ÍCONE DE CADEADO AZUL) -->
-        <div class="step-item">
-          <div class="step-date-col">2 OCT 2026</div>
+        <!-- ETAPA 1: ORDER PAID (ÍCONE DE CADEADO AZUL) -->
+        <div class="step-item" id="stepItemPaid">
+          <div class="step-date-col" id="stepDatePaid">– –</div>
           <div class="step-node-col">
             <svg class="step-padlock-svg" viewBox="0 0 22 34" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M5.5 13.5V7.5C5.5 4.46243 7.96243 2 11 2C14.0376 2 16.5 4.46243 16.5 7.5V13.5" stroke="#0c77c3" stroke-width="3.2" stroke-linecap="round"/>
@@ -731,25 +731,25 @@
           </div>
         </div>
 
-        <!-- ETAPA 2: 3 OCT 2026 - EXPECTED TO SHIP -->
-        <div class="step-item">
-          <div class="step-date-col">3 OCT 2026</div>
-          <div class="step-node-col">
+        <!-- ETAPA 2: EXPECTED TO SHIP -->
+        <div class="step-item" id="stepItemShip">
+          <div class="step-date-col" id="stepDateShip">– –</div>
+          <div class="step-node-col" id="stepNodeShip">
             <span class="step-node-circle-gray"></span>
           </div>
           <div class="step-content-col">
-            <div class="step-title-bold">Expected to ship</div>
+            <div class="step-title-bold" id="stepTitleShip">Expected to ship</div>
           </div>
         </div>
 
-        <!-- ETAPA 3: 6 OCT 2026 - ESTIMATED DELIVERY (VERDE) -->
-        <div class="step-item">
-          <div class="step-date-col">6 OCT 2026</div>
-          <div class="step-node-col">
+        <!-- ETAPA 3: ESTIMATED DELIVERY (VERDE) -->
+        <div class="step-item" id="stepItemDelivery">
+          <div class="step-date-col" id="stepDateDelivery">– –</div>
+          <div class="step-node-col" id="stepNodeDelivery">
             <span class="step-node-circle-gray"></span>
           </div>
           <div class="step-content-col">
-            <div class="step-title-green">ESTIMATED DELIVERY 6 OCTOBER<br>2026</div>
+            <div class="step-title-green" id="stepTitleDelivery">ESTIMATED DELIVERY</div>
             <div class="step-pickup-sub">PARKLANDS PICKUP POINT</div>
           </div>
         </div>
@@ -895,17 +895,201 @@
   </div>
 
   <script>
-    // Sincroniza a variante selecionada no localStorage, se houver
+    // ---- Date helpers ----
+    function fmtLong(d) {
+      var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    function fmtShortUpper(d) {
+      var months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    function fmtMonthYear(d) {
+      var months = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+      return months[d.getMonth()] + '<br>' + d.getFullYear();
+    }
+
+    function getOrderId() {
+      const params = new URLSearchParams(window.location.search);
+      var oid = (params.get('order') || params.get('orderId') || params.get('id') || '').trim();
+      if (!oid) {
+        try {
+          oid = localStorage.getItem('takealot_order_id') || localStorage.getItem('takealot_last_order_id') || '';
+        } catch(e){}
+      }
+      if (!oid) {
+        try {
+          var m = document.cookie.match(/(?:^|;\s*)takealot_order_id=([^;]+)/);
+          if (m) oid = decodeURIComponent(m[1]);
+        } catch(e){}
+      }
+      if (!oid) {
+        oid = 'T' + Math.floor(10000000000000 + Math.random() * 90000000000000);
+      }
+      try {
+        localStorage.setItem('takealot_order_id', oid);
+        localStorage.setItem('takealot_last_order_id', oid);
+        document.cookie = 'takealot_order_id=' + encodeURIComponent(oid) + '; path=/; max-age=31536000; SameSite=Lax';
+      } catch(e){}
+      try {
+        if (!window.location.search.includes('order=')) {
+          var u = new URL(window.location.href);
+          u.searchParams.set('order', oid);
+          window.history.replaceState(null, '', u.pathname + u.search + u.hash);
+        }
+      } catch(e){}
+      return oid;
+    }
+
+    var _urlOrderId = getOrderId();
+
+    function preserveOrderInLinks(oid) {
+      if (!oid) return;
+      var links = document.querySelectorAll('a[href*="sucess.html"], a[href*="tracking.html"], a[href*="track.html"]');
+      for (var i = 0; i < links.length; i++) {
+        try {
+          var u = new URL(links[i].href, window.location.origin);
+          u.searchParams.set('order', oid);
+          links[i].href = u.pathname + u.search + u.hash;
+        } catch(e) {}
+      }
+    }
+
+    function _renderTracking(purchaseDate, deliveryDate, status) {
+      var shipDate = new Date(purchaseDate); shipDate.setDate(shipDate.getDate() + 1);
+      var el;
+      el = document.getElementById('stepDatePaid');     if(el) el.textContent = fmtShortUpper(purchaseDate);
+      el = document.getElementById('stepDateShip');     if(el) el.textContent = fmtShortUpper(shipDate);
+      el = document.getElementById('stepDateDelivery'); if(el) el.textContent = fmtShortUpper(deliveryDate);
+      el = document.getElementById('trackingDeliveryDate'); if(el) el.textContent = fmtLong(deliveryDate);
+      el = document.getElementById('stepTitleDelivery');
+      if(el) el.innerHTML = 'ESTIMATED DELIVERY ' + deliveryDate.getDate() + ' ' +
+        ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'][deliveryDate.getMonth()] +
+        '<br>' + deliveryDate.getFullYear();
+
+      var nodeShip   = document.getElementById('stepNodeShip');
+      var nodeDel    = document.getElementById('stepNodeDelivery');
+      var titleShip  = document.getElementById('stepTitleShip');
+      var titleDel   = document.getElementById('stepTitleDelivery');
+      var delivTitle = document.getElementById('trackingDeliveryTitle');
+
+      // CANCELLED state
+      if (status === 'CANCELLED') {
+        if (delivTitle) delivTitle.innerHTML = 'This order was cancelled';
+        return;
+      }
+
+      // IN_TRANSIT or DELIVERED → mark ship step active
+      if ((status === 'IN_TRANSIT' || status === 'DELIVERED') && nodeShip) {
+        nodeShip.innerHTML = '<svg viewBox="0 0 22 22" style="width:22px;height:22px;"><circle cx="11" cy="11" r="10.5" fill="#0c77c3"/><text x="11" y="15.5" text-anchor="middle" fill="white" font-size="13" font-weight="bold">✓</text></svg>';
+        if(titleShip) titleShip.textContent = 'Shipped';
+      }
+
+      // DELIVERED → mark delivery step active
+      if (status === 'DELIVERED') {
+        if (nodeDel) {
+          nodeDel.innerHTML = '<svg viewBox="0 0 22 22" style="width:22px;height:22px;"><circle cx="11" cy="11" r="10.5" fill="#16a34a"/><text x="11" y="15.5" text-anchor="middle" fill="white" font-size="13" font-weight="bold">✓</text></svg>';
+        }
+        if (titleDel) {
+          titleDel.innerHTML = 'DELIVERED ' + deliveryDate.getDate() + ' ' +
+            ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'][deliveryDate.getMonth()] +
+            '<br>' + deliveryDate.getFullYear();
+          titleDel.style.color = '#16a34a';
+        }
+        if (delivTitle) delivTitle.innerHTML = 'Delivered on ' + fmtLong(deliveryDate);
+      }
+    }
+
     (function initTracking() {
       try {
-                var imgEl = document.getElementById('trackingProductImg');
-        if (imgEl) imgEl.src = 'images/jbl-partybox-520-main.png';
+        // ---- If URL has order ID: fetch from API (source of truth) ----
+        if (_urlOrderId) {
+          preserveOrderInLinks(_urlOrderId);
+          fetch('/api/order?order=' + encodeURIComponent(_urlOrderId))
+            .then(function(r) { return r.json(); })
+            .then(function(order) {
+              if (order.error) {
+                var delivTitle = document.getElementById('trackingDeliveryTitle');
+                if (delivTitle) delivTitle.innerHTML = 'Takealot Delivery &middot; Tracking #' + _urlOrderId;
+                var orderIdSpan = document.getElementById('trackingOrderId');
+                if (orderIdSpan) orderIdSpan.textContent = '#' + _urlOrderId;
+                var today = new Date();
+                var delDate = new Date();
+                delDate.setTime(delDate.getTime() + 8 * 86400000);
+                _renderTracking(today, delDate, 'PROCESSING');
+                return;
+              }
 
+              // ---- Product image from API ----
+              if (order.product_image) {
+                var imgEl = document.getElementById('trackingProductImg');
+                if (imgEl) { imgEl.src = order.product_image; imgEl.onerror = null; }
+              }
+
+              // ---- Update page title and order number span ----
+              if (document.title) document.title = 'Tracking #' + order.order_id + ' | Takealot.com';
+              var orderIdSpan = document.getElementById('trackingOrderId');
+              if (orderIdSpan) orderIdSpan.textContent = '#' + order.order_id;
+              preserveOrderInLinks(order.order_id);
+
+              // ---- Render dates and status ----
+              _renderTracking(
+                new Date(order.received_date),
+                new Date(order.delivery_date),
+                order.status
+              );
+            })
+            .catch(function(err) {
+              console.error('[tracking] API error:', err);
+              _legacyTrackingFallback();
+            });
+          return;
         }
-      } catch (e) {
-        console.error(e);
-      }
+
+        // ---- No URL param: fall back to localStorage ----
+        _legacyTrackingFallback();
+
+      } catch(e) { console.error(e); }
     })();
+
+    // Legacy path: localStorage + days-elapsed (kept for backward compatibility)
+    function _legacyTrackingFallback() {
+      try {
+        var oid = _urlOrderId || getOrderId();
+        var orderIdSpan = document.getElementById('trackingOrderId');
+        if (orderIdSpan) orderIdSpan.textContent = '#' + oid;
+        if (document.title) document.title = 'Tracking #' + oid + ' | Takealot.com';
+        preserveOrderInLinks(oid);
+
+        var imgEl = document.getElementById('trackingProductImg');
+        if (imgEl) imgEl.src = 'images/laptop-main.jpg';
+
+        var purchaseKey = 'takealot_purchase_date_' + oid;
+        var deliveryKey = 'takealot_delivery_date_' + oid;
+        var stored = localStorage.getItem(purchaseKey) || localStorage.getItem('takealot_purchase_date');
+        var purchaseDate;
+        if (stored) {
+          purchaseDate = new Date(stored);
+          if (isNaN(purchaseDate.getTime())) purchaseDate = new Date();
+        } else {
+          purchaseDate = new Date();
+          try {
+            localStorage.setItem(purchaseKey, purchaseDate.toISOString());
+            localStorage.setItem('takealot_purchase_date', purchaseDate.toISOString());
+          } catch(e){}
+        }
+        var today = new Date(); today.setHours(0,0,0,0);
+        var purchaseMidnight = new Date(purchaseDate); purchaseMidnight.setHours(0,0,0,0);
+        var daysElapsed = Math.floor((today - purchaseMidnight) / 86400000);
+        var deliveryDate = new Date(purchaseDate); deliveryDate.setTime(deliveryDate.getTime() + 8 * 86400000);
+        // Map days elapsed to a pseudo-status
+        var pseudoStatus = 'PROCESSING';
+        if (daysElapsed >= 1) pseudoStatus = 'IN_TRANSIT';
+        if (daysElapsed >= 7) pseudoStatus = 'DELIVERED';
+        _renderTracking(purchaseDate, deliveryDate, pseudoStatus);
+      } catch(e) { console.error(e); }
+    }
   </script>
 
 </body>
