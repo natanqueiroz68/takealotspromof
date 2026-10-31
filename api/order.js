@@ -322,7 +322,7 @@ module.exports = async function handler(req, res) {
         product_name: '15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11',
         product_price: 999,
         currency: 'ZAR',
-        product_image: 'https://cdn.jsdelivr.net/gh/natanqueiroz68/Takelaotpromo@main/images/laptop-main.jpg',
+        product_image: 'https://cdn.jsdelivr.net/gh/natanqueiroz68/takealotspromof@main/images/laptop-main.jpg',
         received_date: now,
         delivery_date: fixedDelivery,
         tracking_url: 'https://takeasealotsa.vercel.app/track.html?order=' + encodeURIComponent(orderId),
