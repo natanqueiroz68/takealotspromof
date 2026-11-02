@@ -578,10 +578,28 @@
     }
 
     (function initSuccess() {
-      function fmt(d) {
-        var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        return days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+      function formatSADate(dateInput, type) {
+        try {
+          var d = new Date(dateInput);
+          if (isNaN(d.getTime())) return '–';
+          return new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Africa/Johannesburg',
+            weekday: type === 'long' ? 'long' : 'short',
+            day: 'numeric',
+            month: type === 'long' ? 'long' : 'short',
+            year: 'numeric'
+          }).format(d);
+        } catch(e) {
+          var d = new Date(dateInput);
+          var sastDate = new Date(d.getTime() + (2 * 3600000 + d.getTimezoneOffset() * 60000));
+          var days = type === 'long'
+            ? ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+            : ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+          var months = type === 'long'
+            ? ['January','February','March','April','May','June','July','August','September','October','November','December']
+            : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          return days[sastDate.getDay()] + ', ' + sastDate.getDate() + ' ' + months[sastDate.getMonth()] + ' ' + sastDate.getFullYear();
+        }
       }
 
       var odEl = document.getElementById('successOrderDate');
@@ -606,6 +624,14 @@
         if (onEl) onEl.textContent = urlOrderId;
         preserveOrderInLinks(urlOrderId);
 
+        // Preload cached dates for this specific order if available
+        try {
+          var cachedOrd = localStorage.getItem('takealot_order_date_fmt_' + urlOrderId);
+          var cachedDel = localStorage.getItem('takealot_deliv_date_fmt_' + urlOrderId);
+          if (cachedOrd && odEl) odEl.textContent = cachedOrd;
+          if (cachedDel && ddEl) ddEl.textContent = cachedDel;
+        } catch(e){}
+
         // Fetch full order from API (source of truth) & trigger email if email param is present
         var searchParams = new URLSearchParams(window.location.search);
         var clientEmail = searchParams.get('email') || searchParams.get('customer_email') || '';
@@ -621,12 +647,21 @@
           .then(function(order) {
             if (order.error) {
               if (onEl) onEl.textContent = urlOrderId;
-              _setFallbackDates(fmt, odEl, ddEl);
+              _setFallbackDates(odEl, ddEl);
               return;
             }
             if (onEl) onEl.textContent = order.order_id;
-            if (odEl) odEl.textContent = fmt(new Date(order.received_date));
-            if (ddEl) ddEl.textContent = fmt(new Date(order.delivery_date));
+            var ordStr = order.order_date_formatted || formatSADate(order.received_date, 'short');
+            var delStr = order.delivery_date_formatted || formatSADate(order.delivery_date, 'short');
+            if (odEl) odEl.textContent = ordStr;
+            if (ddEl) ddEl.textContent = delStr;
+            try {
+              localStorage.setItem('takealot_order_date_fmt_' + order.order_id, ordStr);
+              localStorage.setItem('takealot_deliv_date_fmt_' + order.order_id, delStr);
+              localStorage.setItem('takealot_purchase_date_' + order.order_id, order.received_date);
+              localStorage.setItem('takealot_delivery_date_' + order.order_id, order.delivery_date);
+            } catch(e){}
+
             if (order.product_image) {
               var img = document.querySelector('.product-img');
               if (img) img.src = order.product_image;
@@ -634,7 +669,7 @@
             preserveOrderInLinks(order.order_id);
           })
           .catch(function() {
-            _setFallbackDates(fmt, odEl, ddEl);
+            _setFallbackDates(odEl, ddEl);
           });
         return;
       }
@@ -642,42 +677,66 @@
       // No order in URL: show placeholder instead of inventing order number
       if (onEl) onEl.textContent = '#' + (urlOrderId || getOrderId());
       if (trackBtn) trackBtn.href = 'track.html';
-      _setFallbackDates(fmt, odEl, ddEl);
+      _setFallbackDates(odEl, ddEl);
 
-      function _setFallbackDates(fmt, odEl, ddEl) {
+      function _setFallbackDates(odEl, ddEl) {
         var oid = urlOrderId || getOrderId();
+        try {
+          localStorage.removeItem('takealot_purchase_date');
+          localStorage.removeItem('takealot_delivery_date');
+        } catch(e){}
+
         var purchaseKey = 'takealot_purchase_date_' + oid;
         var deliveryKey = 'takealot_delivery_date_' + oid;
-        var storedPurchase = localStorage.getItem(purchaseKey) || localStorage.getItem('takealot_purchase_date');
-        var purchaseDate;
+        var fmtOrdKey = 'takealot_order_date_fmt_' + oid;
+        var fmtDelKey = 'takealot_deliv_date_fmt_' + oid;
+
+        var storedPurchase = localStorage.getItem(purchaseKey);
+        var purchaseDate = null;
         if (storedPurchase) {
-          purchaseDate = new Date(storedPurchase);
-          if (isNaN(purchaseDate.getTime())) purchaseDate = new Date();
-        } else {
+          var d = new Date(storedPurchase);
+          if (!isNaN(d.getTime()) && d.getTime() >= new Date('2026-11-01T00:00:00Z').getTime()) {
+            purchaseDate = d;
+          } else {
+            try {
+              localStorage.removeItem(purchaseKey);
+              localStorage.removeItem(deliveryKey);
+              localStorage.removeItem(fmtOrdKey);
+              localStorage.removeItem(fmtDelKey);
+            } catch(e){}
+          }
+        }
+        if (!purchaseDate) {
           purchaseDate = new Date();
           try {
             localStorage.setItem(purchaseKey, purchaseDate.toISOString());
-            localStorage.setItem('takealot_purchase_date', purchaseDate.toISOString());
           } catch(e){}
         }
 
-        var storedDelivery = localStorage.getItem(deliveryKey) || localStorage.getItem('takealot_delivery_date');
-        var deliveryDate;
-        if (storedDelivery) {
-          deliveryDate = new Date(storedDelivery);
-          if (isNaN(deliveryDate.getTime())) {
-            deliveryDate = new Date(purchaseDate.getTime() + 8 * 86400000);
+        var storedDelivery = localStorage.getItem(deliveryKey);
+        var deliveryDate = null;
+        if (storedDelivery && purchaseDate) {
+          var d2 = new Date(storedDelivery);
+          if (!isNaN(d2.getTime()) && d2.getTime() > purchaseDate.getTime()) {
+            deliveryDate = d2;
           }
-        } else {
+        }
+        if (!deliveryDate) {
           deliveryDate = new Date(purchaseDate.getTime() + 8 * 86400000);
           try {
             localStorage.setItem(deliveryKey, deliveryDate.toISOString());
-            localStorage.setItem('takealot_delivery_date', deliveryDate.toISOString());
           } catch(e){}
         }
 
-        if (odEl) odEl.textContent = fmt(purchaseDate);
-        if (ddEl) ddEl.textContent = fmt(deliveryDate);
+        var ordFmt = formatSADate(purchaseDate, 'short');
+        var delFmt = formatSADate(deliveryDate, 'short');
+        try {
+          localStorage.setItem(fmtOrdKey, ordFmt);
+          localStorage.setItem(fmtDelKey, delFmt);
+        } catch(e){}
+
+        if (odEl) odEl.textContent = ordFmt;
+        if (ddEl) ddEl.textContent = delFmt;
       }
     })();
   </script>

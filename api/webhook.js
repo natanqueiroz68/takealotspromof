@@ -106,11 +106,38 @@ async function kv_set(key, value) {
   return true;
 }
 
-// ── Date helper ────────────────────────────────────────────────────────────────
-function addDays(isoDate, days) {
-  const d = new Date(isoDate);
-  d.setDate(d.getDate() + days);
-  return d.toISOString();
+// ── South Africa (Africa/Johannesburg) Date Helpers ───────────────────────────
+const SA_TIMEZONE = 'Africa/Johannesburg';
+
+function formatSADate(dateInput, type = 'short') {
+  if (!dateInput) return '–';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '–';
+  const options = {
+    timeZone: SA_TIMEZONE,
+    weekday: type === 'long' ? 'long' : 'short',
+    day: 'numeric',
+    month: type === 'long' ? 'long' : 'short',
+    year: 'numeric'
+  };
+  return new Intl.DateTimeFormat('en-GB', options).format(d);
+}
+
+function getSAIsoDate(dateInput) {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: SA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(d);
+}
+
+function addCalendarDays(isoOrDate, days = 8) {
+  const d = new Date(isoOrDate);
+  return new Date(d.getTime() + days * 86400000).toISOString();
 }
 
 // ── Email template renderer & sender ───────────────────────────────────────────
@@ -123,17 +150,9 @@ function renderOrderEmail(order) {
     return null;
   }
 
-  const d = new Date(order.received_date || Date.now());
-  const del = new Date(order.delivery_date || (Date.now() + 8 * 86400000));
-
-  const daysShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const daysLong = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const monthsLong = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-  const orderDateShort = `${daysShort[d.getDay()]}, ${d.getDate()} ${monthsShort[d.getMonth()]} ${d.getFullYear()}`;
-  const deliveryDateIso = del.toISOString().slice(0, 10);
-  const deliveryDateLong = `${daysLong[del.getDay()]}, ${del.getDate()} ${monthsLong[del.getMonth()]} ${del.getFullYear()}`;
+  const orderDateShort = formatSADate(order.received_date, 'short');
+  const deliveryDateIso = getSAIsoDate(order.delivery_date);
+  const deliveryDateLong = formatSADate(order.delivery_date, 'long');
 
   return template
     .replace(/\{\{customer_name\}\}/g, order.customer_name || 'Customer')
@@ -145,16 +164,8 @@ function renderOrderEmail(order) {
 }
 
 function renderOrderPlainText(order) {
-  const d = new Date(order.received_date || Date.now());
-  const del = new Date(order.delivery_date || (Date.now() + 8 * 86400000));
-
-  const daysShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const daysLong = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const monthsLong = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-  const orderDateShort = `${daysShort[d.getDay()]}, ${d.getDate()} ${monthsShort[d.getMonth()]} ${d.getFullYear()}`;
-  const deliveryDateLong = `${daysLong[del.getDay()]}, ${del.getDate()} ${monthsLong[del.getMonth()]} ${del.getFullYear()}`;
+  const orderDateShort = formatSADate(order.received_date, 'short');
+  const deliveryDateLong = formatSADate(order.delivery_date, 'long');
   const customerName = order.customer_name || 'Customer';
   const orderNumber = order.order_id;
   const variant = 'Premium Black';
@@ -506,10 +517,6 @@ async function handler(req, res) {
                     : '';
   const productImage = (envKey && process.env[envKey]) || process.env.PRODUCT_IMAGE_DEFAULT || '';
 
-  const receivedAt  = payload.createdAt || new Date().toISOString();
-  const deliveredAt = addDays(receivedAt, 8);
-  const now         = new Date().toISOString();
-
   // ── Step 7: build order record & apply idempotency ───────────────────────────
   let existing = null;
   try {
@@ -517,6 +524,11 @@ async function handler(req, res) {
   } catch (err) {
     console.error('[webhook] Redis get error:', err.message);
   }
+
+  const now = new Date().toISOString();
+  // Fixed & immutable dates: preserve original dates if order already exists in database
+  const receivedAt  = (existing && (existing.received_date || existing.created_at)) || now;
+  const deliveredAt = (existing && existing.delivery_date) || addCalendarDays(receivedAt, 8);
 
   const order = {
     order_id:       orderId,
@@ -530,9 +542,13 @@ async function handler(req, res) {
     product_price:  productPrice,
     currency,
     product_image:  productImage,
-    // Dates
-    received_date:  (existing && existing.received_date) || receivedAt,
-    delivery_date:  (existing && existing.delivery_date) || deliveredAt,
+    // Dates (immutable & synchronized in Africa/Johannesburg)
+    received_date:           receivedAt,
+    delivery_date:           deliveredAt,
+    order_date_formatted:    formatSADate(receivedAt, 'short'),
+    delivery_date_formatted: formatSADate(deliveredAt, 'short'),
+    delivery_date_long:      formatSADate(deliveredAt, 'long'),
+    delivery_date_iso:       getSAIsoDate(deliveredAt),
     // Tracking URL: dynamic with real ID
     tracking_url:   'https://takelaotpromosi.vercel.app/track.html?order=' + encodeURIComponent(orderId),
     // Status

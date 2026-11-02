@@ -1324,12 +1324,6 @@
             num_items: currentQty
           });
         }
-        try {
-          var pDate = new Date();
-          var dDate = new Date(pDate.getTime() + 8 * 86400000);
-          localStorage.setItem("takealot_purchase_date", pDate.toISOString());
-          localStorage.setItem("takealot_delivery_date", dDate.toISOString());
-        } catch(err) {}
         window.location.href = getCheckoutUrl();
       });
     }
