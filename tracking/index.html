@@ -290,6 +290,19 @@
       border-radius: 9999px;
       transform: translateX(-50%);
       z-index: 1;
+      overflow: hidden;
+    }
+
+    .stepper-progress-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 0%;
+      background: #0c77c3;
+      border-radius: 9999px;
+      transition: height 1s cubic-bezier(0.4, 0, 0.2, 1), background 0.8s ease, box-shadow 0.8s ease;
+      box-shadow: 0 0 6px rgba(12, 119, 195, 0.35);
     }
 
     .step-item {
@@ -714,8 +727,10 @@
     <section class="stepper-section" aria-label="Order tracking timeline">
       <div class="stepper-container">
 
-        <!-- Trilha contínua de fundo cinza claro -->
-        <div class="stepper-continuous-track"></div>
+        <!-- Trilha contínua de fundo cinza claro com preenchimento animado -->
+        <div class="stepper-continuous-track">
+          <div class="stepper-progress-fill" id="stepperProgressFill"></div>
+        </div>
 
         <!-- ETAPA 1: ORDER PAID (ÍCONE DE CADEADO AZUL) -->
         <div class="step-item" id="stepItemPaid">
@@ -1047,6 +1062,34 @@
       if ((status === 'IN_TRANSIT' || status === 'DELIVERED') && nodeShip) {
         nodeShip.innerHTML = '<svg viewBox="0 0 22 22" style="width:22px;height:22px;"><circle cx="11" cy="11" r="10.5" fill="#0c77c3"/><text x="11" y="15.5" text-anchor="middle" fill="white" font-size="13" font-weight="bold">✓</text></svg>';
         if(titleShip) titleShip.textContent = 'Shipped';
+      }
+
+      // Animate progress fill bar
+      var progressFill = document.getElementById('stepperProgressFill');
+      if (progressFill) {
+        var targetHeight = '18%';
+        var targetBg = '#0c77c3';
+        var targetShadow = '0 0 6px rgba(12, 119, 195, 0.35)';
+
+        if (status === 'DELIVERED') {
+          targetHeight = '100%';
+          targetBg = 'linear-gradient(180deg, #0c77c3 0%, #16a34a 100%)';
+          targetShadow = '0 0 10px rgba(22, 163, 74, 0.45)';
+        } else if (status === 'IN_TRANSIT') {
+          targetHeight = '56%';
+          targetBg = 'linear-gradient(180deg, #0c77c3 0%, #0b6ecb 100%)';
+          targetShadow = '0 0 8px rgba(12, 119, 195, 0.4)';
+        } else if (status === 'CANCELLED') {
+          targetHeight = '18%';
+          targetBg = '#dc2626';
+          targetShadow = '0 0 8px rgba(220, 38, 38, 0.4)';
+        }
+
+        setTimeout(function() {
+          progressFill.style.height = targetHeight;
+          progressFill.style.background = targetBg;
+          progressFill.style.boxShadow = targetShadow;
+        }, 120);
       }
 
       // DELIVERED → mark delivery step active
