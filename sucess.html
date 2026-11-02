@@ -695,15 +695,8 @@
         var purchaseDate = null;
         if (storedPurchase) {
           var d = new Date(storedPurchase);
-          if (!isNaN(d.getTime()) && d.getTime() >= new Date('2026-11-01T00:00:00Z').getTime()) {
+          if (!isNaN(d.getTime())) {
             purchaseDate = d;
-          } else {
-            try {
-              localStorage.removeItem(purchaseKey);
-              localStorage.removeItem(deliveryKey);
-              localStorage.removeItem(fmtOrdKey);
-              localStorage.removeItem(fmtDelKey);
-            } catch(e){}
           }
         }
         if (!purchaseDate) {

@@ -8,6 +8,12 @@
     { "source": "/track", "destination": "/tracking.html" },
     { "source": "/track.html", "destination": "/tracking.html" }
   ],
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 8 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",

@@ -962,16 +962,8 @@
       var purchaseDate = null;
       if (storedPurchase) {
         var d = new Date(storedPurchase);
-        // If stored date is prior to Nov 1 2026 (stale October test date), clear it
-        if (!isNaN(d.getTime()) && d.getTime() >= new Date('2026-11-01T00:00:00Z').getTime()) {
+        if (!isNaN(d.getTime())) {
           purchaseDate = d;
-        } else {
-          try {
-            localStorage.removeItem(purchaseKey);
-            localStorage.removeItem(deliveryKey);
-            localStorage.removeItem('takealot_order_date_fmt_' + oid);
-            localStorage.removeItem('takealot_deliv_date_fmt_' + oid);
-          } catch(e){}
         }
       }
 
@@ -1023,7 +1015,7 @@
         el = document.getElementById('tlOutDelivery'); if (el) el.textContent = 'Expected ' + formatSADate(dates.deliveryDate, 'short');
 
         // Sync with API (source of truth: database record)
-        var apiUrl = '/api/order?order=' + encodeURIComponent(oid);
+        var apiUrl = '/api/order?order=' + encodeURIComponent(oid) + '&auto_notify=1';
         fetch(apiUrl)
           .then(function (r) { return r.json(); })
           .then(function (order) {
@@ -1040,7 +1032,7 @@
             }
 
             var recD = new Date(order.received_date);
-            if (isNaN(recD.getTime()) || recD.getTime() < new Date('2026-11-01T00:00:00Z').getTime()) {
+            if (isNaN(recD.getTime())) {
               recD = new Date();
             }
             var delivD = new Date(order.delivery_date);

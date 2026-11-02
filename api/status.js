@@ -16,8 +16,13 @@
 
 'use strict';
 
-const REDIS_URL     = process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN   = process.env.UPSTASH_REDIS_REST_TOKEN;
+const REDIS_URL     = process.env.UPSTASH_REDIS_REST_URL
+  || process.env.KV_REST_API_URL
+  || process.env.REDIS_URL;
+const REDIS_TOKEN   = process.env.UPSTASH_REDIS_REST_KV_REST_API_TOKEN
+  || process.env.UPSTASH_REDIS_REST_TOKEN
+  || process.env.KV_REST_API_TOKEN
+  || process.env.REDIS_TOKEN;
 const UPDATE_SECRET = process.env.STATUS_UPDATE_SECRET;
 
 const ALLOWED_STATUSES = ['RECEIVED','PAID','PROCESSING','IN_TRANSIT','DELIVERED','CANCELLED'];
@@ -95,11 +100,25 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Storage write error' });
   }
 
-  console.log('[status] updated:', orderId, previousStatus, '->', newStatus);
+  // Notificação transacional por e-mail quando o status muda
+  const shouldNotify = body.notify !== false;
+  let emailNotice = null;
+  if (shouldNotify && order.customer_email && (newStatus === 'IN_TRANSIT' || newStatus === 'DELIVERED' || newStatus === 'PAID')) {
+    try {
+      const { sendOrderStatusEmail } = require('./order.js');
+      emailNotice = await sendOrderStatusEmail(order, newStatus, true);
+    } catch (e) {
+      console.error('[status] email notification error:', e.message);
+    }
+  }
+
+  console.log('[status] updated:', orderId, previousStatus, '->', newStatus, '| email:', emailNotice ? emailNotice.sent : 'none');
   return res.status(200).json({
     updated:          true,
     order_id:         orderId,
     previous_status:  previousStatus,
     current_status:   newStatus,
+    email_notified:   (emailNotice && emailNotice.sent) ? true : false,
+    email_type:       emailNotice ? emailNotice.type : null,
   });
 };

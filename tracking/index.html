@@ -1032,7 +1032,7 @@
       }
     }
 
-    function _renderTracking(purchaseDate, deliveryDate, status) {
+    function _renderTracking(purchaseDate, deliveryDate, rawStatus) {
       var pDate = new Date(purchaseDate);
       var delDate = new Date(deliveryDate);
       var shipDate = new Date(pDate.getTime() + 86400000);
@@ -1053,56 +1053,110 @@
       var delivTitle = document.getElementById('trackingDeliveryTitle');
 
       // CANCELLED state
-      if (status === 'CANCELLED') {
+      if (rawStatus === 'CANCELLED') {
         if (delivTitle) delivTitle.innerHTML = 'This order was cancelled';
+        var progressFill = document.getElementById('stepperProgressFill');
+        if (progressFill) {
+          progressFill.style.height = '18%';
+          progressFill.style.background = '#dc2626';
+          progressFill.style.boxShadow = '0 0 8px rgba(220, 38, 38, 0.4)';
+        }
         return;
       }
 
-      // IN_TRANSIT or DELIVERED → mark ship step active
-      if ((status === 'IN_TRANSIT' || status === 'DELIVERED') && nodeShip) {
-        nodeShip.innerHTML = '<svg viewBox="0 0 22 22" style="width:22px;height:22px;"><circle cx="11" cy="11" r="10.5" fill="#0c77c3"/><text x="11" y="15.5" text-anchor="middle" fill="white" font-size="13" font-weight="bold">✓</text></svg>';
-        if(titleShip) titleShip.textContent = 'Shipped';
+      // Calcula tempo decorrido desde a compra original (em dias corridos)
+      var now = new Date();
+      var todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var purchaseMidnight = new Date(pDate.getFullYear(), pDate.getMonth(), pDate.getDate());
+      var daysElapsed = Math.floor((todayMidnight - purchaseMidnight) / 86400000);
+
+      // Determinar status efetivo da timeline para pedidos passados e futuros:
+      // - 8+ dias decorridos ou DELIVERED: Etapa 3 ativa (DELIVERED)
+      // - 1+ dia decorrido ou IN_TRANSIT: Etapa 2 ativa (Shipped)
+      // - Menos de 1 dia decorrido e PROCESSING: Etapa 1 ativa (Order paid)
+      var effectiveStatus = 'PROCESSING';
+      if (rawStatus === 'DELIVERED' || daysElapsed >= 8) {
+        effectiveStatus = 'DELIVERED';
+      } else if (rawStatus === 'IN_TRANSIT' || daysElapsed >= 1) {
+        effectiveStatus = 'IN_TRANSIT';
       }
 
-      // Animate progress fill bar
       var progressFill = document.getElementById('stepperProgressFill');
-      if (progressFill) {
-        var targetHeight = '18%';
-        var targetBg = '#0c77c3';
-        var targetShadow = '0 0 6px rgba(12, 119, 195, 0.35)';
 
-        if (status === 'DELIVERED') {
-          targetHeight = '100%';
-          targetBg = 'linear-gradient(180deg, #0c77c3 0%, #16a34a 100%)';
-          targetShadow = '0 0 10px rgba(22, 163, 74, 0.45)';
-        } else if (status === 'IN_TRANSIT') {
-          targetHeight = '56%';
-          targetBg = 'linear-gradient(180deg, #0c77c3 0%, #0b6ecb 100%)';
-          targetShadow = '0 0 8px rgba(12, 119, 195, 0.4)';
-        } else if (status === 'CANCELLED') {
-          targetHeight = '18%';
-          targetBg = '#dc2626';
-          targetShadow = '0 0 8px rgba(220, 38, 38, 0.4)';
+      if (effectiveStatus === 'DELIVERED') {
+        // Nó 2: Shipped com checkmark
+        if (nodeShip) {
+          nodeShip.innerHTML = '<svg viewBox="0 0 22 22" style="width:22px;height:22px;"><circle cx="11" cy="11" r="10.5" fill="#0c77c3"/><text x="11" y="15.5" text-anchor="middle" fill="white" font-size="13" font-weight="bold">✓</text></svg>';
         }
+        if (titleShip) titleShip.textContent = 'Shipped';
 
-        setTimeout(function() {
-          progressFill.style.height = targetHeight;
-          progressFill.style.background = targetBg;
-          progressFill.style.boxShadow = targetShadow;
-        }, 120);
-      }
-
-      // DELIVERED → mark delivery step active
-      if (status === 'DELIVERED') {
+        // Nó 3: DELIVERED verde com checkmark
         if (nodeDel) {
           nodeDel.innerHTML = '<svg viewBox="0 0 22 22" style="width:22px;height:22px;"><circle cx="11" cy="11" r="10.5" fill="#16a34a"/><text x="11" y="15.5" text-anchor="middle" fill="white" font-size="13" font-weight="bold">✓</text></svg>';
         }
         if (titleDel) {
-          titleDel.innerHTML = 'DELIVERED ' + getSADay(delDate) + ' ' +
-            fmtMonthUpper(delDate) + '<br>' + getSAYear(delDate);
+          titleDel.innerHTML = 'DELIVERED ' + getSADay(delDate) + ' ' + fmtMonthUpper(delDate) + '<br>' + getSAYear(delDate);
           titleDel.style.color = '#16a34a';
         }
         if (delivTitle) delivTitle.innerHTML = 'Delivered on ' + formatSADate(delDate, 'short');
+
+        // Barra anima até 100% com gradiente verde
+        if (progressFill) {
+          setTimeout(function() {
+            progressFill.style.height = '100%';
+            progressFill.style.background = 'linear-gradient(180deg, #0c77c3 0%, #16a34a 100%)';
+            progressFill.style.boxShadow = '0 0 10px rgba(22, 163, 74, 0.45)';
+          }, 120);
+        }
+      } else if (effectiveStatus === 'IN_TRANSIT') {
+        // Nó 2: Shipped com checkmark
+        if (nodeShip) {
+          nodeShip.innerHTML = '<svg viewBox="0 0 22 22" style="width:22px;height:22px;"><circle cx="11" cy="11" r="10.5" fill="#0c77c3"/><text x="11" y="15.5" text-anchor="middle" fill="white" font-size="13" font-weight="bold">✓</text></svg>';
+        }
+        if (titleShip) titleShip.textContent = 'Shipped';
+
+        // Nó 3: Pendente cinza
+        if (nodeDel) {
+          nodeDel.innerHTML = '<span class="step-node-circle-gray"></span>';
+        }
+        if (titleDel) {
+          titleDel.innerHTML = 'ESTIMATED DELIVERY ' + getSADay(delDate) + ' ' + fmtMonthUpper(delDate) + '<br>' + getSAYear(delDate);
+          titleDel.style.color = '';
+        }
+        if (delivTitle) delivTitle.innerHTML = 'Estimated Delivery from <span id="trackingDeliveryDate">' + formatSADate(delDate, 'short') + '</span>';
+
+        // Barra anima até 56%
+        if (progressFill) {
+          setTimeout(function() {
+            progressFill.style.height = '56%';
+            progressFill.style.background = '#0c77c3';
+            progressFill.style.boxShadow = '0 0 8px rgba(12, 119, 195, 0.4)';
+          }, 120);
+        }
+      } else {
+        // PROCESSING: Nó 1 ativo (Order paid), nós 2 e 3 pendentes
+        if (nodeShip) {
+          nodeShip.innerHTML = '<span class="step-node-circle-gray"></span>';
+        }
+        if (titleShip) titleShip.textContent = 'Expected to ship';
+
+        if (nodeDel) {
+          nodeDel.innerHTML = '<span class="step-node-circle-gray"></span>';
+        }
+        if (titleDel) {
+          titleDel.innerHTML = 'ESTIMATED DELIVERY ' + getSADay(delDate) + ' ' + fmtMonthUpper(delDate) + '<br>' + getSAYear(delDate);
+          titleDel.style.color = '';
+        }
+        if (delivTitle) delivTitle.innerHTML = 'Estimated Delivery from <span id="trackingDeliveryDate">' + formatSADate(delDate, 'short') + '</span>';
+
+        // Barra anima até 18%
+        if (progressFill) {
+          setTimeout(function() {
+            progressFill.style.height = '18%';
+            progressFill.style.background = '#0c77c3';
+            progressFill.style.boxShadow = '0 0 6px rgba(12, 119, 195, 0.35)';
+          }, 120);
+        }
       }
     }
 
@@ -1111,13 +1165,13 @@
         var oid = _urlOrderId || getOrderId();
         preserveOrderInLinks(oid);
 
-        // Clean up legacy global localStorage keys that leak old dates across orders
+        // Higienização de chaves globais legadas (sem ID) para não vazar dados
         try {
           localStorage.removeItem('takealot_purchase_date');
           localStorage.removeItem('takealot_delivery_date');
         } catch(e){}
 
-        // Preload cached dates for this order if available
+        // Preload de chaves isoladas por ID do pedido (preservando histórico anterior)
         var purchaseKey = 'takealot_purchase_date_' + oid;
         var deliveryKey = 'takealot_delivery_date_' + oid;
         var storedPurchase = localStorage.getItem(purchaseKey);
@@ -1125,21 +1179,14 @@
         if (storedPurchase && storedDelivery) {
           var pPre = new Date(storedPurchase);
           var dPre = new Date(storedDelivery);
-          if (!isNaN(pPre.getTime()) && !isNaN(dPre.getTime()) && pPre.getTime() >= new Date('2026-11-01T00:00:00Z').getTime()) {
+          if (!isNaN(pPre.getTime()) && !isNaN(dPre.getTime())) {
             _renderTracking(pPre, dPre, 'PROCESSING');
-          } else {
-            try {
-              localStorage.removeItem(purchaseKey);
-              localStorage.removeItem(deliveryKey);
-              localStorage.removeItem('takealot_order_date_fmt_' + oid);
-              localStorage.removeItem('takealot_deliv_date_fmt_' + oid);
-            } catch(e){}
           }
         }
 
-        // ---- If URL has order ID: fetch from API (source of truth) ----
+        // Fonte primária da verdade: API do backend
         if (oid) {
-          fetch('/api/order?order=' + encodeURIComponent(oid))
+          fetch('/api/order?order=' + encodeURIComponent(oid) + '&auto_notify=1')
             .then(function(r) { return r.json(); })
             .then(function(order) {
               if (order.error) {
@@ -1151,26 +1198,28 @@
                 return;
               }
 
-              // ---- Product image from API ----
+              // Imagem do produto da API
               if (order.product_image) {
                 var imgEl = document.getElementById('trackingProductImg');
                 if (imgEl) { imgEl.src = order.product_image; imgEl.onerror = null; }
               }
 
-              // ---- Update page title and order number span ----
+              // Atualiza título da página e identificador do pedido
               if (document.title) document.title = 'Tracking #' + order.order_id + ' | Takealot.com';
               var orderIdSpan = document.getElementById('trackingOrderId');
               if (orderIdSpan) orderIdSpan.textContent = '#' + order.order_id;
               preserveOrderInLinks(order.order_id);
 
               var pDate = new Date(order.received_date);
-              if (isNaN(pDate.getTime()) || pDate.getTime() < new Date('2026-11-01T00:00:00Z').getTime()) {
+              if (isNaN(pDate.getTime())) {
                 pDate = new Date();
               }
               var dDate = new Date(order.delivery_date);
               if (isNaN(dDate.getTime()) || dDate.getTime() <= pDate.getTime()) {
                 dDate = new Date(pDate.getTime() + 8 * 86400000);
               }
+
+              // Salva em cache isolado por ID mantendo datas intactas
               try {
                 localStorage.setItem('takealot_purchase_date_' + order.order_id, pDate.toISOString());
                 localStorage.setItem('takealot_delivery_date_' + order.order_id, dDate.toISOString());
@@ -1178,7 +1227,7 @@
                 localStorage.setItem('takealot_deliv_date_fmt_' + order.order_id, order.delivery_date_formatted || formatSADate(dDate, 'short'));
               } catch(e){}
 
-              // ---- Render dates and status ----
+              // Renderiza stepper e timeline
               _renderTracking(pDate, dDate, order.status);
             })
             .catch(function(err) {
@@ -1188,13 +1237,13 @@
           return;
         }
 
-        // ---- No URL param: fall back to localStorage ----
+        // Sem ID na URL: fallback seguro
         _legacyTrackingFallback();
 
       } catch(e) { console.error(e); }
     })();
 
-    // Legacy fallback: order-specific localStorage or fresh calculation
+    // Fallback: cache isolado por ID ou criação de novo pedido com data dinâmica
     function _legacyTrackingFallback() {
       try {
         var oid = _urlOrderId || getOrderId();
@@ -1212,7 +1261,7 @@
         var purchaseDate = null;
         if (storedPurchase) {
           var d = new Date(storedPurchase);
-          if (!isNaN(d.getTime()) && d.getTime() >= new Date('2026-11-01T00:00:00Z').getTime()) {
+          if (!isNaN(d.getTime())) {
             purchaseDate = d;
           }
         }
@@ -1238,15 +1287,7 @@
           } catch(e){}
         }
 
-        var today = new Date(); today.setHours(0,0,0,0);
-        var purchaseMidnight = new Date(purchaseDate); purchaseMidnight.setHours(0,0,0,0);
-        var daysElapsed = Math.floor((today - purchaseMidnight) / 86400000);
-
-        // Map days elapsed to a pseudo-status
-        var pseudoStatus = 'PROCESSING';
-        if (daysElapsed >= 1) pseudoStatus = 'IN_TRANSIT';
-        if (daysElapsed >= 7) pseudoStatus = 'DELIVERED';
-        _renderTracking(purchaseDate, deliveryDate, pseudoStatus);
+        _renderTracking(purchaseDate, deliveryDate, 'PROCESSING');
       } catch(e) { console.error(e); }
     }
   </script>
