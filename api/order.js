@@ -11,13 +11,16 @@
 
 'use strict';
 
-const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL
+const REDIS_URL   = process.env.UPSTASH_REDIS_REST_KV_REST_API_URL
+  || process.env.UPSTASH_REDIS_REST_URL
   || process.env.KV_REST_API_URL
-  || process.env.REDIS_URL;
+  || process.env.REDIS_URL
+  || 'https://engaging-gibbon-246981.upstash.io';
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_KV_REST_API_TOKEN
   || process.env.UPSTASH_REDIS_REST_TOKEN
   || process.env.KV_REST_API_TOKEN
-  || process.env.REDIS_TOKEN;
+  || process.env.REDIS_TOKEN
+  || 'gQAAAAAAA8TFAAIgcDJmMjljODQzODc4NWU0MGM0OWUzOTA0M2JkZDFlNTUyNg';
 
 const fs = require('fs');
 const path = require('path');
